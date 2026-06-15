@@ -18,6 +18,9 @@ data.db.before-*
 # sync logs
 sync.log
 
+# source photos (cropped versions live in src/app/)
+ENT.JPG
+
 # editor
 .DS_Store
 .vscode
