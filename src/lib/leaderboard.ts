@@ -1,6 +1,11 @@
 import { db, schema } from "@/lib/db/client";
 import { eq } from "drizzle-orm";
 
+// Pool rule: the first scheduled match for these teams happened before
+// the draft was finalized, so its result doesn't count toward the
+// leaderboard. Their later matches are scored normally.
+const EXCLUDE_FIRST_MATCH_FOR = ["MEX", "CAN", "KOR"];
+
 export type TeamStat = {
   teamId: number;
   team: string;
@@ -34,6 +39,17 @@ export async function computeLeaderboard(): Promise<ManagerStanding[]> {
     .from(schema.matches)
     .where(eq(schema.matches.status, "final"));
 
+  const teamIdByCode = new Map(teams.map((t) => [t.code, t.id]));
+  const skipMatchIds = new Set<number>();
+  for (const code of EXCLUDE_FIRST_MATCH_FOR) {
+    const teamId = teamIdByCode.get(code);
+    if (teamId == null) continue;
+    const earliest = finals
+      .filter((m) => m.homeTeamId === teamId || m.awayTeamId === teamId)
+      .sort((a, b) => a.kickoffAt.localeCompare(b.kickoffAt))[0];
+    if (earliest) skipMatchIds.add(earliest.id);
+  }
+
   const stats = new Map<number, TeamStat>();
   for (const t of teams) {
     stats.set(t.id, {
@@ -50,6 +66,7 @@ export async function computeLeaderboard(): Promise<ManagerStanding[]> {
   }
 
   for (const m of finals) {
+    if (skipMatchIds.has(m.id)) continue;
     if (m.homeTeamId == null || m.awayTeamId == null) continue;
     if (m.homeScore == null || m.awayScore == null) continue;
     const home = stats.get(m.homeTeamId);
