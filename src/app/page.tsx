@@ -1,9 +1,13 @@
-import { computeLeaderboard } from "@/lib/leaderboard";
+import { computeLeaderboard, type TeamStat } from "@/lib/leaderboard";
+import { EXCLUSION_NOTE } from "@/lib/pool-rules";
 
 export default async function Home() {
   const standings = await computeLeaderboard();
   const anyMatchesPlayed = standings.some((s) =>
-    s.teams.some((t) => t.played > 0),
+    s.teams.some((t) => t.played > 0 || t.excluded != null),
+  );
+  const anyExcluded = standings.some((s) =>
+    s.teams.some((t) => t.excluded != null),
   );
 
   return (
@@ -29,10 +33,10 @@ export default async function Home() {
             <tr>
               <th className="px-3 py-2 w-32">Manager</th>
               <th className="px-3 py-2">Team</th>
-              <th className="px-3 py-2 text-center w-10">W</th>
-              <th className="px-3 py-2 text-center w-10">D</th>
-              <th className="px-3 py-2 text-center w-10">L</th>
-              <th className="px-3 py-2 text-center w-14">Pts</th>
+              <th className="px-3 py-2 text-center w-14">W</th>
+              <th className="px-3 py-2 text-center w-14">D</th>
+              <th className="px-3 py-2 text-center w-14">L</th>
+              <th className="px-3 py-2 text-center w-16">Pts</th>
               <th className="px-3 py-2 text-center w-16">Total</th>
               <th className="px-3 py-2 text-center w-20 text-[var(--danger)]">
                 Dropped
@@ -47,15 +51,41 @@ export default async function Home() {
           </tbody>
         </table>
       </section>
+
+      {anyExcluded && (
+        <p className="text-xs text-[var(--fg-muted)]">
+          <span className="inline-block w-2 h-2 align-middle mr-1 rounded bg-[color-mix(in_oklab,var(--warning)_50%,transparent)]" />
+          {EXCLUSION_NOTE}
+        </p>
+      )}
     </div>
   );
 }
 
-function ManagerBlock({
-  s,
+function StatCell({
+  counted,
+  excluded,
 }: {
-  s: Awaited<ReturnType<typeof computeLeaderboard>>[number];
+  counted: number;
+  excluded: number;
 }) {
+  if (counted === 0 && excluded === 0) return null;
+  return (
+    <>
+      {counted > 0 ? counted : excluded > 0 ? 0 : null}
+      {excluded > 0 && (
+        <span
+          className="ml-1 text-xs line-through text-[var(--warning)]"
+          title="Excluded — match played before the draft was finalized"
+        >
+          +{excluded}
+        </span>
+      )}
+    </>
+  );
+}
+
+function ManagerBlock({ s }: { s: { managerId: number; manager: string; total: number; droppedPoints: number; rank: number; teams: TeamStat[] } }) {
   const rows = s.teams.length || 1;
   return (
     <>
@@ -83,16 +113,16 @@ function ManagerBlock({
             )}
           </td>
           <td className="px-3 py-2 text-center font-mono">
-            {t?.won || ""}
+            {t && <StatCell counted={t.won} excluded={t.excluded?.won ?? 0} />}
           </td>
           <td className="px-3 py-2 text-center font-mono">
-            {t?.drawn || ""}
+            {t && <StatCell counted={t.drawn} excluded={t.excluded?.drawn ?? 0} />}
           </td>
           <td className="px-3 py-2 text-center font-mono">
-            {t?.lost || ""}
+            {t && <StatCell counted={t.lost} excluded={t.excluded?.lost ?? 0} />}
           </td>
           <td className="px-3 py-2 text-center font-mono">
-            {t ? t.points : ""}
+            {t && <StatCell counted={t.points} excluded={t.excluded?.points ?? 0} />}
           </td>
           {i === 0 && (
             <>
